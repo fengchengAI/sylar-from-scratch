@@ -152,13 +152,13 @@ void TimerManager::listExpiredCb(std::vector<std::function<void()> >& cbs) {
         // 使用clock_gettime(CLOCK_MONOTONIC_RAW)，应该不可能出现时间回退的问题
         rollover = true;
     }
-    if(!rollover && ((*m_timers.begin())->m_next > now_ms)) {
+    if(!rollover && ((*m_timers.begin())->m_next > now_ms)) {  //最小的时间都比较远，就返回。
         return;
     }
 
     Timer::ptr now_timer(new Timer(now_ms));
     auto it = rollover ? m_timers.end() : m_timers.lower_bound(now_timer);
-    while(it != m_timers.end() && (*it)->m_next == now_ms) {
+    while(it != m_timers.end() && (*it)->m_next <= now_ms) {
         ++it;
     }
     expired.insert(expired.begin(), m_timers.begin(), it);
@@ -175,7 +175,7 @@ void TimerManager::listExpiredCb(std::vector<std::function<void()> >& cbs) {
         }
     }
 }
-
+// TODO 这样的时间管理时间复杂度高吗。
 void TimerManager::addTimer(Timer::ptr val, RWMutexType::WriteLock& lock) {
     auto it = m_timers.insert(val).first;
     bool at_front = (it == m_timers.begin()) && !m_tickled;

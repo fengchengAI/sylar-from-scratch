@@ -37,7 +37,8 @@ html
 # cmake output
 build
 lib
-
+./lib
+./build
 # bin
 test_config
 test_env
@@ -50,7 +51,8 @@ test_scheduler
 test_iomanager
 test_timer
 test_hook
-
+.vscode/
+.idea/
 # log
 system.txt
 log.txt

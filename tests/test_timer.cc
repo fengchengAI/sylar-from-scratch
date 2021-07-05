@@ -16,9 +16,9 @@ void timer_callback() {
     SYLAR_LOG_INFO(g_logger) << "timer callback, timeout = " << timeout;
     timeout += 1000;
     if(timeout < 5000) {
-        s_timer->reset(timeout, true);
+         s_timer->reset(timeout, true);
     } else {
-        s_timer->cancel();
+         s_timer->cancel();
     }
 }
 

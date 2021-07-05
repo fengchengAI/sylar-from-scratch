@@ -92,6 +92,7 @@
         "complex": "cpp",
         "unordered_set": "cpp",
         "iomanip": "cpp",
-        "cfenv": "cpp"
+        "cfenv": "cpp",
+        "forward_list": "cpp"
     },
 }

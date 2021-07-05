@@ -83,10 +83,9 @@ Fiber::ptr Fiber::GetThis() {
 /**
  * 带参数的构造函数用于创建其他协程，需要分配栈
  */
-Fiber::Fiber(std::function<void()> cb, size_t stacksize, bool run_in_scheduler)
+Fiber::Fiber(std::function<void()> cb, size_t stacksize)
     : m_id(s_fiber_id++)
-    , m_cb(cb)
-    , m_runInScheduler(run_in_scheduler) {
+    , m_cb(cb){
     ++s_fiber_count;
     m_stacksize = stacksize ? stacksize : g_fiber_stack_size->getValue();
     m_stack     = StackAllocator::Alloc(m_stacksize);
@@ -152,15 +151,11 @@ void Fiber::resume() {
     m_state = RUNNING;
 
     // 如果协程参与调度器调度，那么应该和调度器的主协程进行swap，而不是线程主协程
-    if (m_runInScheduler) {
-        if (swapcontext(&(Scheduler::GetMainFiber()->m_ctx), &m_ctx)) {
-            SYLAR_ASSERT2(false, "swapcontext");
-        }
-    } else {
-        if (swapcontext(&(t_thread_fiber->m_ctx), &m_ctx)) {
-            SYLAR_ASSERT2(false, "swapcontext");
-        }
-    }
+    if (&(Scheduler::GetMainFiber()->m_ctx) == &m_ctx)
+        setcontext(&Scheduler::GetMainFiber()->m_ctx);
+    else if (swapcontext(&(Scheduler::GetMainFiber()->m_ctx), &m_ctx))
+        SYLAR_ASSERT2(false, "swapcontext");
+
 }
 
 void Fiber::yield() {
@@ -171,21 +166,17 @@ void Fiber::yield() {
         m_state = READY;
     }
 
-    // 如果协程参与调度器调度，那么应该和调度器的主协程进行swap，而不是线程主协程
-    if (m_runInScheduler) {
-        if (swapcontext(&m_ctx, &(Scheduler::GetMainFiber()->m_ctx))) {
-            SYLAR_ASSERT2(false, "swapcontext");
-        }
-    } else {
-        if (swapcontext(&m_ctx, &(t_thread_fiber->m_ctx))) {
-            SYLAR_ASSERT2(false, "swapcontext");
-        }
+    if (swapcontext(&m_ctx, &(Scheduler::GetMainFiber()->m_ctx))) {
+        SYLAR_ASSERT2(false, "swapcontext");
     }
+
 }
 
 /**
  * 这里没有处理协程函数出现异常的情况，同样是为了简化状态管理，并且个人认为协程的异常不应该由框架处理，应该由开发者自行处理
  */
+
+// 除了根协程，其他协程的入口地址的都是这个
 void Fiber::MainFunc() {
     Fiber::ptr cur = GetThis(); // GetThis()的shared_from_this()方法让引用计数加1
     SYLAR_ASSERT(cur);

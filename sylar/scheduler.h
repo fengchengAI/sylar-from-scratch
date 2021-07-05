@@ -23,6 +23,7 @@ namespace sylar {
  * @details 封装的是N-M的协程调度器
  *          内部有一个线程池,支持协程在线程池里面切换
  */
+
 class Scheduler {
 public:
     typedef std::shared_ptr<Scheduler> ptr;
@@ -34,8 +35,8 @@ public:
      * @param[in] use_caller 是否将当前线程也作为调度线程
      * @param[in] name 名称
      */
-    Scheduler(size_t threads = 1, bool use_caller = true, const std::string &name = "Scheduler");
-
+    Scheduler(size_t threads = 1, const std::string &name = "Scheduler");
+    static Scheduler * GetThis();
     /**
      * @brief 析构函数
      */
@@ -49,7 +50,7 @@ public:
     /**
      * @brief 获取当前线程调度器指针
      */
-    static Scheduler *GetThis();
+    // static Scheduler *GetThis();
 
     /**
      * @brief 获取当前线程的主协程
@@ -127,8 +128,9 @@ private:
     template <class FiberOrCb>
     bool scheduleNoLock(FiberOrCb fc, int thread) {
         bool need_tickle = m_tasks.empty();
-        ScheduleTask task(fc, thread);
-        if (task.fiber || task.cb) {
+        // ScheduleTask task(fc, thread);
+        std::shared_ptr<ScheduleTask> task (new ScheduleTask(fc, thread));
+        if (task->fiber || task->cb) {
             m_tasks.push_back(task);
         }
         return need_tickle;
@@ -142,6 +144,7 @@ private:
         Fiber::ptr fiber;
         std::function<void()> cb;
         int thread;
+        std::atomic<bool> isLock{false};
 
         ScheduleTask(Fiber::ptr f, int thr) {
             fiber  = f;
@@ -161,6 +164,7 @@ private:
             fiber  = nullptr;
             cb     = nullptr;
             thread = -1;
+            isLock = false;
         }
     };
 
@@ -172,7 +176,7 @@ private:
     /// 线程池
     std::vector<Thread::ptr> m_threads;
     /// 任务队列
-    std::list<ScheduleTask> m_tasks;
+    std::list<std::shared_ptr<ScheduleTask> > m_tasks;
     /// 线程池的线程ID数组
     std::vector<int> m_threadIds;
     /// 工作线程数量，不包含use_caller的主线程
@@ -183,16 +187,18 @@ private:
     std::atomic<size_t> m_idleThreadCount = {0};
 
     /// 是否use caller
-    bool m_useCaller;
+    // bool m_useCaller;
+
     /// use_caller为true时，调度器所在线程的调度协程
-    Fiber::ptr m_rootFiber;
+    // Fiber::ptr m_rootFiber;
+
     /// use_caller为true时，调度器所在线程的id
-    int m_rootThread = 0;
+    /// int m_rootThread = 0;   // 执行schedule构造函数时的thread id。一个scheduler只有一个
 
     /// 是否正在停止
     bool m_stopping = false;
 };
 
-} // end namespace sylar
+}// end namespace sylar
 
 #endif

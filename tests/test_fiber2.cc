@@ -4,7 +4,6 @@
  * @version 0.1
  * @date 2021-06-15
  */
-#include "sylar/fiber.h"
 #include "sylar/sylar.h"
 #include <string>
 #include <vector>
@@ -23,7 +22,7 @@ void run_in_fiber() {
      * 非对称协程，子协程不能创建并运行新的子协程，下面的操作是有问题的，
      * 子协程再创建子协程，原来的主协程就跑飞了
      */
-    sylar::Fiber::ptr fiber(new sylar::Fiber(run_in_fiber2, 0, false));
+    sylar::Fiber::ptr fiber(new sylar::Fiber(run_in_fiber2, 0));
     fiber->resume();
 
     SYLAR_LOG_INFO(g_logger) << "run_in_fiber end";
@@ -37,7 +36,7 @@ int main(int argc, char *argv[]) {
 
     sylar::Fiber::GetThis();
 
-    sylar::Fiber::ptr fiber(new sylar::Fiber(run_in_fiber, 0, false));
+    sylar::Fiber::ptr fiber(new sylar::Fiber(run_in_fiber, 0));
     fiber->resume();
 
     SYLAR_LOG_INFO(g_logger) << "main end";

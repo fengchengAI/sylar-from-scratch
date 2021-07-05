@@ -50,7 +50,7 @@ Thread::Thread(std::function<void()> cb, const std::string &name)
 
 Thread::~Thread() {
     if (m_thread) {
-        pthread_detach(m_thread);
+        pthread_join(m_thread, 0);
     }
 }
 

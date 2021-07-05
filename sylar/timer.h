@@ -62,7 +62,7 @@ private:
     bool m_recurring = false;
     /// 执行周期
     uint64_t m_ms = 0;
-    /// 精确的执行时间
+    /// 精确的执行时间，也就是到期时间
     uint64_t m_next = 0;
     /// 回调函数
     std::function<void()> m_cb;
@@ -155,10 +155,13 @@ private:
 private:
     /// Mutex
     RWMutexType m_mutex;
+
     /// 定时器集合
     std::set<Timer::ptr, Timer::Comparator> m_timers;
+
     /// 是否触发onTimerInsertedAtFront
     bool m_tickled = false;
+
     /// 上次执行时间
     uint64_t m_previouseTime = 0;
 };

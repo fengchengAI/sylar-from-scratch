@@ -22,9 +22,9 @@ static std::ostream &operator<<(std::ostream &os, const EpollCtlOp &op) {
 #define XX(ctl) \
     case ctl:   \
         return os << #ctl;
-        XX(EPOLL_CTL_ADD);
-        XX(EPOLL_CTL_MOD);
-        XX(EPOLL_CTL_DEL);
+    XX(EPOLL_CTL_ADD);
+    XX(EPOLL_CTL_MOD);
+    XX(EPOLL_CTL_DEL);
 #undef XX
     default:
         return os << (int)op;
@@ -68,13 +68,11 @@ IOManager::FdContext::EventContext &IOManager::FdContext::getEventContext(IOMana
     case IOManager::WRITE:
         return write;
     default:
-        SYLAR_ASSERT2(false, "getContext");
+        SYLAR_ASSERT2(false, "getEventContext invalid event");
     }
-    throw std::invalid_argument("getContext invalid event");
 }
 
 void IOManager::FdContext::resetEventContext(EventContext &ctx) {
-    ctx.scheduler = nullptr;
     ctx.fiber.reset();
     ctx.cb = nullptr;
 }
@@ -90,16 +88,16 @@ void IOManager::FdContext::triggerEvent(IOManager::Event event) {
     // 调度对应的协程
     EventContext &ctx = getEventContext(event);
     if (ctx.cb) {
-        ctx.scheduler->schedule(ctx.cb);
+        IOManager::GetThis()->schedule(ctx.cb);
     } else {
-        ctx.scheduler->schedule(ctx.fiber);
+        IOManager::GetThis()->schedule(ctx.fiber);
     }
     resetEventContext(ctx);
     return;
 }
 
-IOManager::IOManager(size_t threads, bool use_caller, const std::string &name)
-    : Scheduler(threads, use_caller, name) {
+IOManager::IOManager(size_t threads, const std::string &name)
+    : Scheduler(threads, name) {
     m_epfd = epoll_create(5000);
     SYLAR_ASSERT(m_epfd > 0);
 
@@ -150,6 +148,7 @@ void IOManager::contextResize(size_t size) {
 
 int IOManager::addEvent(int fd, Event event, std::function<void()> cb) {
     // 找到fd对应的FdContext，如果不存在，那就分配一个
+    // TODO 这里可以不用加锁的，不支持多个线程使用同一个fd的，
     FdContext *fd_ctx = nullptr;
     RWMutexType::ReadLock lock(m_mutex);
     if ((int)m_fdContexts.size() > fd) {
@@ -162,7 +161,7 @@ int IOManager::addEvent(int fd, Event event, std::function<void()> cb) {
         fd_ctx = m_fdContexts[fd];
     }
 
-    // 同一个fd不允许重复添加相同的事件
+    // 同一个fd不允许重复添加相同的事件，因为是在et模式下，不可能先读n字节再读m字节
     FdContext::MutexType::Lock lock2(fd_ctx->mutex);
     if (SYLAR_UNLIKELY(fd_ctx->events & event)) {
         SYLAR_LOG_ERROR(g_logger) << "addEvent assert fd=" << fd
@@ -192,10 +191,10 @@ int IOManager::addEvent(int fd, Event event, std::function<void()> cb) {
     // 找到这个fd的event事件对应的EventContext，对其中的scheduler, cb, fiber进行赋值
     fd_ctx->events                     = (Event)(fd_ctx->events | event);
     FdContext::EventContext &event_ctx = fd_ctx->getEventContext(event);
-    SYLAR_ASSERT(!event_ctx.scheduler && !event_ctx.fiber && !event_ctx.cb);
+    SYLAR_ASSERT( !event_ctx.fiber && !event_ctx.cb);
 
-    // 赋值scheduler和回调函数，如果回调函数为空，则把当前协程当成回调执行体
-    event_ctx.scheduler = Scheduler::GetThis();
+    // 赋值回调函数，如果回调函数为空，则把当前协程当成回调执行体
+
     if (cb) {
         event_ctx.cb.swap(cb);
     } else {
@@ -361,12 +360,14 @@ void IOManager::idle() {
 
     // 一次epoll_wait最多检测256个就绪事件，如果就绪事件超过了这个数，那么会在下轮epoll_wati继续处理
     const uint64_t MAX_EVNETS = 256;
-    epoll_event *events       = new epoll_event[MAX_EVNETS]();
-    std::shared_ptr<epoll_event> shared_events(events, [](epoll_event *ptr) {
-        delete[] ptr;
+    static  thread_local epoll_event *events       = new epoll_event[MAX_EVNETS]();
+    static  thread_local std::shared_ptr<epoll_event> shared_events(events, [](epoll_event *ptr) {
+      delete[] ptr;
     });
 
     while (true) {
+        std::cout<<"IOManager::idle()"<<std::endl;
+
         // 获取下一个定时器的超时时间，顺便判断调度器是否停止
         uint64_t next_timeout = 0;
         if( SYLAR_UNLIKELY(stopping(next_timeout))) {
@@ -401,7 +402,7 @@ void IOManager::idle() {
             }
             cbs.clear();
         }
-        
+
         // 遍历所有发生的事件，根据epoll_event的私有指针找到对应的FdContext，进行事件处理
         for (int i = 0; i < rt; ++i) {
             epoll_event &event = events[i];
@@ -419,7 +420,7 @@ void IOManager::idle() {
              * EPOLLERR: 出错，比如写读端已经关闭的pipe
              * EPOLLHUP: 套接字对端关闭
              * 出现这两种事件，应该同时触发fd的读和写事件，否则有可能出现注册的事件永远执行不到的情况
-             */ 
+             */
             if (event.events & (EPOLLERR | EPOLLHUP)) {
                 event.events |= (EPOLLIN | EPOLLOUT) & fd_ctx->events;
             }
@@ -462,12 +463,12 @@ void IOManager::idle() {
         /**
          * 一旦处理完所有的事件，idle协程yield，这样可以让调度协程(Scheduler::run)重新检查是否有新任务要调度
          * 上面triggerEvent实际也只是把对应的fiber重新加入调度，要执行的话还要等idle协程退出
-         */ 
+         */
         Fiber::ptr cur = Fiber::GetThis();
         auto raw_ptr   = cur.get();
         cur.reset();
 
-        raw_ptr->yield();
+        raw_ptr->yield();  // 为什么不能回到run中。
     } // end while(true)
 }
 

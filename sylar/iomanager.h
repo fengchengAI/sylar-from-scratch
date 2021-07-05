@@ -46,8 +46,7 @@ private:
          *          sylar对fd事件做了简化，只预留了读事件和写事件，所有的事件都被归类到这两类事件中
          */
         struct EventContext {
-            /// 执行事件回调的调度器
-            Scheduler *scheduler = nullptr;
+
             /// 事件回调协程
             Fiber::ptr fiber;
             /// 事件回调函数
@@ -93,7 +92,7 @@ public:
      * @param[in] use_caller 是否将调用线程包含进去
      * @param[in] name 调度器的名称
      */
-    IOManager(size_t threads = 1, bool use_caller = true, const std::string &name = "IOManager");
+    IOManager(size_t threads = 1, const std::string &name = "IOManager");
 
     /**
      * @brief 析构函数
